@@ -1,0 +1,258 @@
+/* Estilos principales para la aplicación web del escáner de vulnerabilidades */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    border-radius: 10px 10px 0 0;
+    font-weight: 600;
+}
+
+.btn-primary {
+    background-color: #4361ee;
+    border-color: #4361ee;
+}
+
+.btn-primary:hover {
+    background-color: #3a56d4;
+    border-color: #3a56d4;
+}
+
+.btn-success {
+    background-color: #38b000;
+    border-color: #38b000;
+}
+
+.btn-success:hover {
+    background-color: #2d9900;
+    border-color: #2d9900;
+}
+
+.logo-container {
+    margin-bottom: 1.5rem;
+}
+
+.logo-container i {
+    color: #4361ee;
+    filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.1));
+}
+
+header h1 {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.vuln-type {
+    padding: 1rem;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.vuln-type:hover {
+    background-color: #f1f3f5;
+    transform: translateY(-5px);
+}
+
+.vuln-type i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+footer {
+    padding: 1rem 0;
+    border-top: 1px solid #eaeaea;
+    margin-top: 3rem;
+}
+
+/* Estilos específicos para los resultados */
+.console-line {
+    padding: 3px 0;
+    border-bottom: 1px dotted #e9ecef;
+}
+
+.console-output {
+    background-color: #343a40;
+    color: #f8f9fa;
+    font-family: 'Courier New', Courier, monospace;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.risk-high {
+    color: #ff5757;
+    font-weight: bold;
+}
+
+.risk-medium {
+    color: #ffb347;
+    font-weight: bold;
+}
+
+.risk-low {
+    color: #82ca9d;
+}
+
+.risk-unknown {
+    color: #adb5bd;
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 1.5rem;
+    }
+    
+    .vuln-type {
+        margin-bottom: 1rem;
+    }
+    
+    .console-output {
+        height: 300px;
+    }
+}
+/* ---------- A U R O R A  (colorido & elegante) ---------- */
+.aurora-body {
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f7f8fc;
+  color: #1f2937;
+}
+
+.aurora-hero {
+  background: linear-gradient(135deg, #5B8CFF 0%, #8B5CF6 50%, #F43F5E 100%);
+}
+.hero-icon i{
+  display:inline-grid; place-items:center;
+  width:64px; height:64px; border-radius:50%;
+  background: rgba(255,255,255,.2);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
+  font-size:28px;
+}
+
+.aurora-footer {
+  border-top: 4px solid transparent;
+  border-image: linear-gradient(90deg,#5B8CFF,#8B5CF6,#F43F5E) 1;
+}
+
+/* Card principal con borde superior en gradiente */
+.aurora-card{
+  background:#fff;
+  border-radius:16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
+  position:relative;
+}
+.aurora-card::before{
+  content:""; position:absolute; inset:0 0 auto 0; height:4px; border-radius:16px 16px 0 0;
+  background: linear-gradient(90deg,#5B8CFF,#8B5CF6,#F43F5E);
+}
+
+/* Botón gradiente */
+.btn-gradient{
+  background-image: linear-gradient(135deg,#5B8CFF 0%, #8B5CF6 50%, #F43F5E 100%);
+  color:#fff; border:0;
+  box-shadow:0 10px 24px rgba(91,140,255,.3);
+}
+.btn-gradient:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+
+/* Chips de vulnerabilidades */
+.chip{
+  display:inline-flex; align-items:center; gap:.5rem;
+  padding:.4rem .9rem; border-radius:999px; font-weight:600;
+  background:#eef2ff; color:#1f2937;
+}
+.chip i{font-size:0.95rem}
+.chip-sqli{ background:#ffe4e6; }
+.chip-xss{ background:#fef3c7; }
+.chip-click{ background:#cffafe; }
+.chip-headers{ background:#e0e7ff; }
+.chip-redirect{ background:#dcfce7; }
+.chip-csrf{ background:#e5e7eb; }
+
+/* Stepper */
+.stepper .step{
+  background:#fff; border-radius:14px; padding:1rem; height:100%;
+  box-shadow:0 6px 16px rgba(0,0,0,.06);
+}
+.step-number{
+  width:36px; height:36px; border-radius:50%;
+  display:inline-grid; place-items:center; margin-bottom:.5rem;
+  color:#fff; font-weight:800;
+  background: linear-gradient(135deg,#5B8CFF,#8B5CF6);
+}
+
+/* Tip */
+.aurora-tip{
+  border-radius:12px; background:#f8fafc; border:1px solid #e5e7eb;
+}
+
+/* Barra de resultados */
+.result-bar{
+  background:#fff; border-radius:16px;
+  border-left:4px solid; 
+  border-image: linear-gradient(180deg,#5B8CFF,#F43F5E) 1;
+}
+.url-badge{
+  background: #f1f5f9; color:#111827;
+}
+
+/* KPI cards */
+.kpi-card{
+  background:#fff; border-radius:14px; text-align:center; padding:1rem;
+  box-shadow:0 6px 16px rgba(0,0,0,.06);
+}
+.kpi-icon{
+  width:44px;height:44px;border-radius:50%;
+  display:inline-grid;place-items:center;color:#fff;margin-bottom:.4rem;
+}
+.kpi-high{ background:linear-gradient(135deg,#fb7185,#ef4444); }
+.kpi-med{  background:linear-gradient(135deg,#f59e0b,#f97316); }
+.kpi-low{  background:linear-gradient(135deg,#22c55e,#10b981); }
+.kpi-unk{  background:linear-gradient(135deg,#94a3b8,#6b7280); }
+.kpi-title{ font-size:.9rem; color:#6b7280; }
+.kpi-value{ font-size:1.4rem; font-weight:800; }
+
+/* Acordeones */
+.accordion-button{
+  border-radius:12px!important; background:#fff;
+}
+.accordion-button:not(.collapsed){
+  background:#f8fafc;
+  box-shadow:none;
+}
+
+/* (Tu consola ya existe) Ajuste para altura razonable en resultados */
+.console-output{
+  max-height:360px; overflow:auto;
+}
+
+/* Responsive */
+@media (max-width: 768px){
+  .hero-icon i{ width:56px; height:56px; font-size:24px; }
+}

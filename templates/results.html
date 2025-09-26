@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Resultados · Escáner{% endblock %}
+{% block hero_title %}Resultados del Escaneo{% endblock %}
+{% block hero_subtitle %}Resumen y detalle por vulnerabilidad{% endblock %}
+
+{% block alerts %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+{% endblock %}
+
+{% block content %}
+  <!-- Barra superior (visual; no requiere backend) -->
+  <div class="result-bar d-flex align-items-center justify-content-between p-3 rounded-3 shadow-sm mb-4">
+    <div class="d-flex align-items-center gap-3">
+      <span class="badge url-badge"><i class="fas fa-link me-1"></i> {{ scanned_url|default('', true) }}</span>
+      <small class="text-muted d-none d-md-inline">Fecha: {{ scan_time|default('', true) }}</small>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('index') }}" class="btn btn-outline-dark rounded-pill">
+        <i class="fas fa-arrow-left me-1"></i> Volver al inicio
+      </a>
+      <button class="btn btn-gradient rounded-pill" onclick="window.print()">
+        <i class="fas fa-print me-1"></i> Imprimir
+      </button>
+    </div>
+  </div>
+
+  <!-- Consola de escaneo (igual que la tuya, con look aurora por CSS) -->
+  <div class="card shadow mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h3 class="mb-0">Consola de Escaneo</h3>
+      <div class="scan-status text-center" id="scanStatusContainer">
+        <div class="spinner-border text-primary" role="status" id="scanSpinner">
+          <span class="visually-hidden">Cargando...</span>
+        </div>
+        <p class="mt-2 mb-0" id="scanStatus">Escaneo en progreso...</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="console-output" id="consoleOutput">
+        <div class="console-line">Inicializando escaneo...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resumen/Tabla (exactamente tu estructura e IDs) -->
+  <div class="card shadow mb-4 hidden" id="resultsCard">
+    <div class="card-header bg-light">
+      <h3 class="mb-0 text-center">Resumen de Vulnerabilidades</h3>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead class="table-dark">
+            <tr>
+              <th>Vulnerabilidad</th>
+              <th>Estado</th>
+              <th>Nivel de Riesgo</th>
+            </tr>
+          </thead>
+          <tbody id="resultsTable"></tbody>
+        </table>
+      </div>
+
+      <div class="text-center mt-4">
+        <a href="{{ url_for('download_report', session_id=session_id) }}" class="btn btn-success btn-lg" id="downloadBtn" disabled>
+          <i class="fas fa-file-pdf me-2"></i> Descargar Reporte PDF
+        </a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // === TU JS ORIGINAL (polling a get_results) ===
+  document.addEventListener('DOMContentLoaded', function() {
+    const consoleOutput = document.getElementById('consoleOutput');
+    const resultsTable = document.getElementById('resultsTable');
+    const resultsCard = document.getElementById('resultsCard');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const scanSpinner = document.getElementById('scanSpinner');
+    const scanStatus = document.getElementById('scanStatus');
+    
+    let scanComplete = false;
+    const results = {};
+    
+    function getResults() {
+      fetch('{{ url_for("get_results") }}')
+      .then(response => response.json())
+      .then(data => {
+        data.results.forEach(message => {
+          addConsoleMessage(message);
+
+          // extrae "Vulnerabilidad: Estado (Risk: Nivel)"
+          const match = message.match(/^(.*?): (.*?) \(Risk: (.*?)\)$/);
+          if (match) {
+            const [, vulnerability, status, risk] = match;
+            results[vulnerability] = { status, risk };
+          }
+        });
+
+        if (data.complete && !scanComplete) {
+          scanComplete = true;
+          updateResultsTable();
+          resultsCard.classList.remove('hidden');
+          downloadBtn.removeAttribute('disabled');
+          scanSpinner.classList.add('hidden');
+          scanStatus.textContent = 'Escaneo completado';
+          scanStatus.classList.add('text-success');
+        } else if (!scanComplete) {
+          setTimeout(getResults, 1000);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        addConsoleMessage('Error en la comunicación con el servidor: ' + error.message);
+        setTimeout(getResults, 2000);
+      });
+    }
+    
+    function addConsoleMessage(message) {
+      const lineElement = document.createElement('div');
+      lineElement.className = 'console-line';
+      if (message.includes('(Risk: High)')) {
+        lineElement.classList.add('risk-high');
+      } else if (message.includes('(Risk: Medium)')) {
+        lineElement.classList.add('risk-medium');
+      } else if (message.includes('(Risk: Low)')) {
+        lineElement.classList.add('risk-low');
+      } else if (message.includes('(Risk: Unknown)')) {
+        lineElement.classList.add('risk-unknown');
+      }
+      lineElement.textContent = message;
+      consoleOutput.appendChild(lineElement);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+    
+    function updateResultsTable() {
+      resultsTable.innerHTML = '';
+      for (const [vulnerability, { status, risk }] of Object.entries(results)) {
+        const row = document.createElement('tr');
+
+        const vulnCell = document.createElement('td');
+        vulnCell.textContent = vulnerability;
+        row.appendChild(vulnCell);
+
+        const statusCell = document.createElement('td');
+        statusCell.textContent = status;
+        row.appendChild(statusCell);
+
+        const riskCell = document.createElement('td');
+        riskCell.textContent = risk;
+        if (risk === 'High') riskCell.className = 'risk-high';
+        else if (risk === 'Medium') riskCell.className = 'risk-medium';
+        else if (risk === 'Low') riskCell.className = 'risk-low';
+        else riskCell.className = 'risk-unknown';
+
+        row.appendChild(riskCell);
+        resultsTable.appendChild(row);
+      }
+    }
+
+    setTimeout(getResults, 1000);
+  });
+</script>
+{% endblock %}
+
