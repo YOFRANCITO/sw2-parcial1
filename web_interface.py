@@ -281,6 +281,7 @@ def check_cryptographic_failures(url):
                             issues.append("Certificate expired")
                     else:
                         issues.append("Invalid certificate")
+                        
     except (socket.timeout, ConnectionRefusedError, ssl.SSLError) as e:
         if parsed.scheme == 'https':
             issues.append(f"SSL/TLS Error: {str(e)}")
