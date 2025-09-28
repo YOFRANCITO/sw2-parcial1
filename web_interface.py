@@ -8,39 +8,31 @@ from io import StringIO
 import contextlib
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+import ssl
+import re
+import socket
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'vulnerability_scanner_secret_key'
 
-# Configuración para entornos cloud y locales
-REPORT_DIR = os.environ.get('REPORT_DIR', 'reports')
-
 # Crear directorio para informes si no existe
-if not os.path.exists(REPORT_DIR):
-    os.makedirs(REPORT_DIR)
-
-# Configurar logging
-import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+if not os.path.exists('reports'):
+    os.makedirs('reports')
 
 # Cola para comunicación entre el hilo de escaneo y la aplicación web
 scan_queue = queue.Queue()
 results_queue = queue.Queue()
 
-# Funciones del escáner
-
 # PDF report initialization
 def generate_report(results, filename):
-    pdf_path = os.path.join(REPORT_DIR, filename)
+    pdf_path = os.path.join('reports', filename)
     pdf = canvas.Canvas(pdf_path, pagesize=letter)
     pdf.setTitle("Reporte de Vulnerabilidades de Aplicaciones Web")
     pdf.drawString(100, 750, "Reporte de Vulnerabilidades de Aplicaciones Web")
@@ -174,83 +166,135 @@ def check_csrf(url):
 def check_xss_selenium(url):
     results_queue.put(f"Probando XSS con Selenium en {url}...")
     try:
-        from webdriver_manager.chrome import ChromeDriverManager
-        from webdriver_manager.core.os_manager import ChromeType
-        from selenium.webdriver.chrome.service import Service
-        
-        # Configuración para entorno cloud
+        # Usar opciones headless para que no se abra el navegador visualmente
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-setuid-sandbox")
         
-        # Usar webdriver-manager para gestionar el driver automáticamente
-        try:
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-        except:
-            # Fallback para entornos cloud donde ChromeDriverManager podría fallar
-            results_queue.put("Fallback: Usando método alternativo para XSS - simulación sin navegador real")
-            # Simulamos la prueba sin navegador real para entornos donde Selenium no funciona
-            response = requests.get(url)
-            if "<script>alert" in response.text:
-                return ("Potencialmente Vulnerable (Simulado)", "Medium")
-            return ("No se detectaron XSS simples (Simulado)", "Low")
-        
+        driver = webdriver.Chrome(options=chrome_options)
         driver.get(url)
         
         script = "<script>alert('XSS')</script>"
-        try:
-            inputs = driver.find_elements(By.TAG_NAME, 'input')
-            xss_detected = False
-            
-            for input_field in inputs:
+        inputs = driver.find_elements(By.TAG_NAME, 'input')
+        xss_detected = False
+        
+        for input_field in inputs:
+            try:
+                input_field.send_keys(script)
                 try:
-                    input_field.send_keys(script)
-                    try:
-                        input_field.submit()
-                    except:
-                        pass
-                    
-                    # Comprobar si aparece una alerta
-                    try:
-                        alert = driver.switch_to.alert
-                        alert.accept()
-                        xss_detected = True
-                        break
-                    except:
-                        pass
+                    input_field.submit()
                 except:
-                    continue
-            
-            driver.quit()
-            
-            if xss_detected:
-                result = ("Vulnerable (Selenium)", "High")
-            else:
-                result = ("Safe (Selenium)", "Low")
-        except Exception as inner_e:
-            driver.quit()
-            results_queue.put(f"Error al interactuar con la página: {str(inner_e)}")
-            result = ("Error en pruebas XSS", "Unknown")
+                    pass
+                
+                # Comprobar si aparece una alerta
+                try:
+                    alert = driver.switch_to.alert
+                    alert.accept()
+                    xss_detected = True
+                    break
+                except:
+                    pass
+            except:
+                continue
+        
+        driver.quit()
+        
+        if xss_detected:
+            result = ("Vulnerable (Selenium)", "High")
+        else:
+            result = ("Safe (Selenium)", "Low")
     except Exception as e:
         results_queue.put(f"Error en la prueba con Selenium: {str(e)}")
-        # Usar alternativa: comprobación básica si Selenium falla completamente
-        try:
-            response = requests.get(url)
-            if "<script>alert" in response.text:
-                return ("Potencialmente Vulnerable (Alternativo)", "Medium")
-            return ("Prueba alternativa: No se detectaron XSS simples", "Low")
-        except:
-            return ("Error en todas las pruebas XSS", "Unknown")
+        return ("Error (Selenium)", "Unknown")
     
     results_queue.put(f"XSS (Selenium): {result[0]} (Risk: {result[1]})")
     return result
 
-# Función principal de escaneo
+# NUEVA: A01 - Broken Access Control Test
+def check_broken_access_control(url):
+    results_queue.put(f"Probando Broken Access Control (A01) en {url}...")
+    try:
+        # Obtener la página principal
+        res = requests.get(url, timeout=10)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        links = [a.get('href') for a in soup.find_all('a', href=True)]
+        
+        # Buscar enlaces con patrones como /user/1, /profile/123
+        potential_endpoints = [link for link in links if re.search(r'/[\w-]+/\d+', link)]
+        
+        if not potential_endpoints:
+            # Fallback más genérico: probar /id/1
+            potential_endpoints = [f"{urlparse(url).scheme}://{urlparse(url).netloc}/id/1"]
+        
+        vulnerable = False
+        for endpoint in potential_endpoints[:2]:
+            full_url = urljoin(url, endpoint)
+            # Extraer ID original
+            match = re.search(r'/(\d+)', full_url)
+            if not match:
+                continue
+            original_id = match.group(1)
+            tampered_url = re.sub(rf'/{original_id}', f'/{int(original_id) + 1}', full_url)
+            
+            # Hacer requests
+            orig_res = requests.get(full_url, timeout=10)
+            if orig_res.status_code != 200:
+                continue
+            
+            tamp_res = requests.get(tampered_url, timeout=10)
+            if tamp_res.status_code == 200 and len(tamp_res.text.strip()) > 0:
+                vulnerable = True
+                break
+        
+        result = ("Vulnerable" if vulnerable else "Safe", "Critical" if vulnerable else "Medium")
+    except Exception as e:
+        results_queue.put(f"Error en Broken Access Control: {str(e)}")
+        result = ("Error", "Unknown")
+    
+    results_queue.put(f"Broken Access Control (A01): {result[0]} (Risk: {result[1]})")
+    return result
+# NUEVA: A02 - Cryptographic Failures Test
+def check_cryptographic_failures(url):
+    results_queue.put(f"Probando Cryptographic Failures (A02) en {url}...")
+    issues = []
+    try:
+        # Verificar HTTPS
+        parsed = urlparse(url)
+        if parsed.scheme != 'https':
+            issues.append("No HTTPS")
+        else:
+            # Intentar conexión TLS solo si es HTTPS
+            hostname = parsed.netloc.split(':')[0]  # Extraer solo el nombre del host
+            context = ssl.create_default_context()
+            with socket.create_connection((hostname, 443), timeout=10) as sock:
+                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    tls_version = ssock.version()
+                    if tls_version and 'TLSv1.3' not in tls_version and 'TLSv1.2' not in tls_version:
+                        issues.append("TLS version weak (<1.2)")
+                    
+                    # Verificar certificado
+                    cert = ssock.getpeercert()
+                    if cert:
+                        not_after = datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z')
+                        if not_after < datetime.now():
+                            issues.append("Certificate expired")
+                    else:
+                        issues.append("Invalid certificate")
+    except (socket.timeout, ConnectionRefusedError, ssl.SSLError) as e:
+        if parsed.scheme == 'https':
+            issues.append(f"SSL/TLS Error: {str(e)}")
+        # Si es HTTP, no intentamos TLS
+    except Exception as e:
+        issues.append(f"Error: {str(e)}")
+
+    status = f"Issues: {', '.join(issues)}" if issues else "Secure"
+    risk = "Critical" if issues else "Low"
+    result = (status, risk)
+    
+    results_queue.put(f"Cryptographic Failures (A02): {result[0]} (Risk: {result[1]})")
+    return result
+# Función principal de escaneo (actualizada para incluir A01 y A02)
 def scan(url, session_id):
     results_queue.put("Iniciando escaneo de vulnerabilidades...")
     results = {}
@@ -281,6 +325,10 @@ def scan(url, session_id):
     except Exception as e:
         results_queue.put(f"Error en la prueba XSS con Selenium: {str(e)}")
         results["XSS (Selenium)"] = ("Error", "Unknown")
+    
+    # NUEVAS: Agregar A01 y A02
+    results["Broken Access Control (A01)"] = check_broken_access_control(url)
+    results["Cryptographic Failures (A02)"] = check_cryptographic_failures(url)
     
     results_queue.put("\n--- Resultados del Scan ---")
     for vuln, (status, risk) in results.items():
@@ -337,7 +385,7 @@ def get_results():
 @app.route('/download/<session_id>')
 def download_report(session_id):
     filename = f"vulnerability_report_{session_id}.pdf"
-    file_path = os.path.join(REPORT_DIR, filename)
+    file_path = os.path.join('reports', filename)
     
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
@@ -346,6 +394,4 @@ def download_report(session_id):
         return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    # Obtener el puerto desde la variable de entorno o usar 5000 como predeterminado
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
